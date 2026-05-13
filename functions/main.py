@@ -13,7 +13,7 @@ from firebase_admin import initialize_app
 # parameter in the decorator, e.g. @https_fn.on_request(max_instances=5).
 set_global_options(max_instances=10)
 
-# initialize_app()
+initialize_app()
 #
 #
 @https_fn.on_request()
