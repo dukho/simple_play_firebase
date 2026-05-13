@@ -1,0 +1,8 @@
+{
+  "functions": {
+    "source": "functions",
+    "codebase": "default",
+    "ignore": ["venv", ".git"],
+    "main": "main.py" 
+  }
+}
