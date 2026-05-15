@@ -29,7 +29,7 @@ def read_query():
         FROM `simpleplay-c585b.firebase_performance.com_nomad_simpleplay_ANDROID`
         WHERE event_type = 'DURATION_TRACE'
         AND event_name IN ('_app_start', 'app_initial_display')
-        LIMIT 10
+        LIMIT 50
     """
     rows = bq_client.query(query).result()
     data = [dict(row) for row in rows]
