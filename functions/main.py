@@ -21,9 +21,14 @@ def read_query():
         SELECT
             event_timestamp,
             app_build_version,
-            (SELECT value FROM UNNEST(custom_attributes) WHERE key = '_app_start') AS _app_start,
-            (SELECT value FROM UNNEST(custom_attributes) WHERE key = 'app_initial_display') AS app_initial_display
+            event_name,
+            trace_info.duration_us,
+            country,
+            os_version,
+            device_name
         FROM `simpleplay-c585b.firebase_performance.com_nomad_simpleplay_ANDROID`
+        WHERE event_type = 'DURATION_TRACE'
+        AND event_name IN ('_app_start', 'app_initial_display')
         LIMIT 10
     """
     rows = bq_client.query(query).result()
