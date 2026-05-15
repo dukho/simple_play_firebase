@@ -12,6 +12,10 @@ flask_app = Flask(__name__)
 def dev_test():
     return jsonify({"message": "Hello from Flask!"})
 
+@flask_app.get("/dev/query")
+def read_query():
+    return jsonify({"message": "For query!"})
+
 @https_fn.on_request()
 def api(req: https_fn.Request) -> https_fn.Response:
     with flask_app.request_context(req.environ):
