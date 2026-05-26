@@ -35,6 +35,26 @@ def read_query():
     data = [dict(row) for row in rows]
     return jsonify(data)
 
+@flask_app.get("/dev/query2")
+def read_query2():
+    appstart_query = """
+        SELECT
+            event_timestamp,
+            app_build_version,
+            app_display_version,
+            event_name,
+            trace_info.duration_us,
+            os_version
+        FROM `simpleplay-c585b.firebase_performance.com_nomad_simpleplay_ANDROID`
+        WHERE
+            event_type = 'DURATION_TRACE'
+            AND event_name IN ('_app_start', 'app_initial_display')
+            AND event_timestamp > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 60 DAY)
+    """
+    rows = bq_client.query(appstart_query).result()
+    data = [dict(row) for row in rows]
+    return jsonify(data)
+
 @https_fn.on_request()
 def api(req: https_fn.Request) -> https_fn.Response:
     with flask_app.request_context(req.environ):
