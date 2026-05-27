@@ -3,7 +3,7 @@ import requests
 from firebase_functions import https_fn
 from firebase_functions.options import set_global_options
 from firebase_admin import initialize_app
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from google.cloud import bigquery
 
 initialize_app()
@@ -24,6 +24,26 @@ def dev_secret_url():
         print("Error: Slack Webhook URL secret is missing or not bound.")
         return jsonify({"error": "Slack Webhook URL secret is missing or not bound."}), 500
     return jsonify({"hook_url": webhook_url})
+
+# use query param 'message' to customize the Slack message
+@flask_app.get("/dev/slack")
+def dev_slack_test():
+    webhook_url = os.environ.get("SLACK_WEBHOOK_URL")
+    
+    if not webhook_url:
+        return jsonify({"error": "Secret not found"}), 500
+    
+    message = request.args.get("message", "Hello from Flask!")
+    
+    # Send the alert to Slack
+    slack_message = {"text": f"✴️ Hello from functions: {message}"}
+    response = requests.post(webhook_url, json=slack_message)
+    
+    if response.status_code == 200:
+        return jsonify({"status": "success"}), 200
+    else:
+        return jsonify({"error": "Failed to send to Slack"}), 500
+    
 
 @flask_app.get("/dev/query")
 def read_query():
