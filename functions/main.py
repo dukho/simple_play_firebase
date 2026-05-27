@@ -1,3 +1,5 @@
+import os
+import requests
 from firebase_functions import https_fn
 from firebase_functions.options import set_global_options
 from firebase_admin import initialize_app
@@ -14,6 +16,14 @@ bq_client = bigquery.Client()  # reuse across requests (module-level)
 @flask_app.get("/dev/test")
 def dev_test():
     return jsonify({"message": "Hello from Flask!"})
+
+@flask_app.get("/dev/url")
+def dev_secret_url():
+    webhook_url = os.environ.get("SLACK_WEBHOOK_URL")
+    if not webhook_url:
+        print("Error: Slack Webhook URL secret is missing or not bound.")
+        return jsonify({"error": "Slack Webhook URL secret is missing or not bound."}), 500
+    return jsonify({"hook_url": webhook_url})
 
 @flask_app.get("/dev/query")
 def read_query():
@@ -99,7 +109,8 @@ def read_appinit():
     data = [dict(row) for row in rows]
     return jsonify(data)
 
-@https_fn.on_request()
+@https_fn.on_request(secrets=["SLACK_WEBHOOK_URL"])
 def api(req: https_fn.Request) -> https_fn.Response:
+    # This securely passes the incoming Firebase request into your Flask app
     with flask_app.request_context(req.environ):
         return flask_app.full_dispatch_request()
