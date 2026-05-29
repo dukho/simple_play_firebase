@@ -153,7 +153,9 @@ def read_appstart_p90():
         MAX(p90_duration_ms) as duration_ms
         FROM VersionStats
         GROUP BY app_build_version, app_display_version
-        ORDER BY app_build_version DESC
+        ORDER BY
+            app_build_version DESC,
+            app_display_version DESC
     """
     rows = bq_client.query(query).result()
     data = [dict(row) for row in rows]
@@ -182,7 +184,9 @@ def read_appinit_p90():
         MAX(p90_duration_ms) as duration_ms
         FROM VersionStats
         GROUP BY app_build_version, app_display_version
-        ORDER BY app_build_version DESC
+        ORDER BY
+            app_build_version DESC,
+            app_display_version DESC
     """
     rows = bq_client.query(query).result()
     data = [dict(row) for row in rows]
