@@ -129,6 +129,65 @@ def read_appinit():
     data = [dict(row) for row in rows]
     return jsonify(data)
 
+# _app_start, but p90 only
+@flask_app.get("/dev/appstart_p90")
+def read_appstart_p90():
+    query = """
+        WITH VersionStats AS (
+            SELECT
+                app_build_version,
+                app_display_version,
+                event_timestamp,
+                -- Calculate the 90th percentile for a realistic user experience metric
+                PERCENTILE_CONT(trace_info.duration_us, 0.9) OVER(PARTITION BY app_build_version) / 1000 AS p90_duration_ms,
+                os_version
+            FROM `simpleplay-c585b.firebase_performance.com_nomad_simpleplay_ANDROID`
+            WHERE
+                event_type = 'DURATION_TRACE'
+                AND event_name ='_app_start'
+                AND event_timestamp > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 60 DAY)
+        )
+        SELECT
+        app_build_version,
+        app_display_version,
+        MAX(p90_duration_ms) as duration_ms
+        FROM VersionStats
+        GROUP BY app_build_version, app_display_version
+        ORDER BY app_build_version DESC
+    """
+    rows = bq_client.query(query).result()
+    data = [dict(row) for row in rows]
+    return jsonify(data)
+
+@flask_app.get("/dev/appinit_p90")
+def read_appinit_p90():
+    query = """
+        WITH VersionStats AS (
+            SELECT
+                app_build_version,
+                app_display_version,
+                event_timestamp,
+                -- Calculate the 90th percentile for a realistic user experience metric
+                PERCENTILE_CONT(trace_info.duration_us, 0.9) OVER(PARTITION BY app_build_version) / 1000 AS p90_duration_ms,
+                os_version
+            FROM `simpleplay-c585b.firebase_performance.com_nomad_simpleplay_ANDROID`
+            WHERE
+                event_type = 'DURATION_TRACE'
+                AND event_name ='app_initial_display'
+                AND event_timestamp > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 60 DAY)
+        )
+        SELECT
+        app_build_version,
+        app_display_version,
+        MAX(p90_duration_ms) as duration_ms
+        FROM VersionStats
+        GROUP BY app_build_version, app_display_version
+        ORDER BY app_build_version DESC
+    """
+    rows = bq_client.query(query).result()
+    data = [dict(row) for row in rows]
+    return jsonify(data)
+
 @https_fn.on_request(secrets=["SLACK_WEBHOOK_URL"])
 def api(req: https_fn.Request) -> https_fn.Response:
     # This securely passes the incoming Firebase request into your Flask app
