@@ -1,6 +1,6 @@
 import os
 import requests
-from firebase_functions import https_fn
+from firebase_functions import https_fn, scheduler_fn, logger
 from firebase_functions.options import set_global_options
 from firebase_admin import initialize_app
 from flask import Flask, jsonify, request
@@ -15,6 +15,8 @@ bq_client = bigquery.Client()  # reuse across requests (module-level)
 
 @flask_app.get("/dev/test")
 def dev_test():
+    logger.error("This is test ERROR")
+    logger.info("This is test INFO")
     return jsonify({"message": "Hello from Flask!"})
 
 @flask_app.get("/dev/url")
@@ -316,3 +318,21 @@ def api(req: https_fn.Request) -> https_fn.Response:
     # This securely passes the incoming Firebase request into your Flask app
     with flask_app.request_context(req.environ):
         return flask_app.full_dispatch_request()
+
+@scheduler_fn.on_schedule(
+    schedule="*/10 * * * *",
+    secrets=["SLACK_WEBHOOK_URL"]
+)
+def scheduled_slack_alert(event: scheduler_fn.ScheduledEvent) -> None:
+    slack_webhook_url = os.environ.get("SLACK_WEBHOOK_URL")
+
+    if not slack_webhook_url:
+        logger.error("Error: SLACK_WEBHOOK_URL secret is not available.")
+        return
+
+    logger.info("Ok, scheduled_slack_alert can proceed")
+
+    # Send the alert to Slack
+    time = event.schedule_time.isoformat()
+    slack_message = {"text": f"⏰ Hello from scheduled functions: {time}"}
+    requests.post(slack_webhook_url, json=slack_message)
