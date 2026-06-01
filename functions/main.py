@@ -324,7 +324,7 @@ def api(req: https_fn.Request) -> https_fn.Response:
         return flask_app.full_dispatch_request()
 
 @scheduler_fn.on_schedule(
-    schedule="*/10 * * * *",
+    schedule="0 */12 * * *",
     secrets=["SLACK_WEBHOOK_URL"]
 )
 def scheduled_slack_alert(event: scheduler_fn.ScheduledEvent) -> None:
