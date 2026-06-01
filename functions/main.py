@@ -241,9 +241,11 @@ def read_appinit_p90():
 def read_appstart_report():
     webhook_url = os.environ.get("SLACK_WEBHOOK_URL")
     if not webhook_url:
-        print("Error: Slack Webhook URL secret is missing or not bound.")
+        logger.error("Error: Slack Webhook URL secret is missing or not bound.")
         return jsonify({"error": "Slack Webhook URL secret is missing or not bound."}), 500
+    report_appstart(webhook_url)
 
+def report_appstart(webhook_url):
     query = """
         WITH VersionStats AS (
             SELECT
@@ -279,9 +281,11 @@ def read_appstart_report():
 def read_appinit_report():
     webhook_url = os.environ.get("SLACK_WEBHOOK_URL")
     if not webhook_url:
-        print("Error: Slack Webhook URL secret is missing or not bound.")
+        logger.error("Error: Slack Webhook URL secret is missing or not bound.")
         return jsonify({"error": "Slack Webhook URL secret is missing or not bound."}), 500
+    report_appinit(webhook_url)
 
+def report_appinit(webhook_url):
     query = """
         WITH VersionStats AS (
             SELECT
@@ -333,6 +337,5 @@ def scheduled_slack_alert(event: scheduler_fn.ScheduledEvent) -> None:
     logger.info("Ok, scheduled_slack_alert can proceed")
 
     # Send the alert to Slack
-    time = event.schedule_time.isoformat()
-    slack_message = {"text": f"⏰ Hello from scheduled functions: {time}"}
-    requests.post(slack_webhook_url, json=slack_message)
+    report_appstart(slack_webhook_url)
+    report_appinit(slack_webhook_url)
