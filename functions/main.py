@@ -243,34 +243,10 @@ def read_appstart_report():
     if not webhook_url:
         logger.error("Error: Slack Webhook URL secret is missing or not bound.")
         return jsonify({"error": "Slack Webhook URL secret is missing or not bound."}), 500
-    report_appstart(webhook_url)
+    return report_appstart(webhook_url)
 
 def report_appstart(webhook_url):
-    query = """
-        WITH VersionStats AS (
-            SELECT
-                app_build_version,
-                app_display_version,
-                event_timestamp,
-                -- Calculate the 90th percentile for a realistic user experience metric
-                PERCENTILE_CONT(trace_info.duration_us, 0.9) OVER(PARTITION BY app_build_version) / 1000 AS p90_duration_ms,
-                os_version
-            FROM `simpleplay-c585b.firebase_performance.com_nomad_simpleplay_ANDROID`
-            WHERE
-                event_type = 'DURATION_TRACE'
-                AND event_name ='_app_start'
-                AND event_timestamp > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 60 DAY)
-        )
-        SELECT
-        app_build_version,
-        app_display_version,
-        MAX(p90_duration_ms) as duration_ms
-        FROM VersionStats
-        GROUP BY app_build_version, app_display_version
-        ORDER BY
-            app_build_version DESC,
-            app_display_version DESC
-    """
+    query = build_query_for("_app_start")
     rows = bq_client.query(query).result()
     data = [dict(row) for row in rows]
 
@@ -283,10 +259,18 @@ def read_appinit_report():
     if not webhook_url:
         logger.error("Error: Slack Webhook URL secret is missing or not bound.")
         return jsonify({"error": "Slack Webhook URL secret is missing or not bound."}), 500
-    report_appinit(webhook_url)
+    return report_appinit(webhook_url)
 
 def report_appinit(webhook_url):
-    query = """
+    query = build_query_for("app_initial_display")
+    rows = bq_client.query(query).result()
+    data = [dict(row) for row in rows]
+
+    report_message = generate_report("App Initial Display Time (app_initial_display)", data)
+    return report_to_slack(webhook_url, {"text": report_message})
+
+def build_query_for(event_name):
+    query = f"""
         WITH VersionStats AS (
             SELECT
                 app_build_version,
@@ -298,8 +282,9 @@ def report_appinit(webhook_url):
             FROM `simpleplay-c585b.firebase_performance.com_nomad_simpleplay_ANDROID`
             WHERE
                 event_type = 'DURATION_TRACE'
-                AND event_name ='app_initial_display'
+                AND event_name ='{event_name}'
                 AND event_timestamp > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 60 DAY)
+                AND app_build_version != '99000'
         )
         SELECT
         app_build_version,
@@ -311,11 +296,7 @@ def report_appinit(webhook_url):
             app_build_version DESC,
             app_display_version DESC
     """
-    rows = bq_client.query(query).result()
-    data = [dict(row) for row in rows]
-
-    report_message = generate_report("App Initial Display Time (app_initial_display)", data)
-    return report_to_slack(webhook_url, {"text": report_message})
+    return query
 
 @https_fn.on_request(secrets=["SLACK_WEBHOOK_URL"])
 def api(req: https_fn.Request) -> https_fn.Response:
