@@ -1,3 +1,4 @@
+import json
 import os
 import requests
 from firebase_functions import https_fn, scheduler_fn, logger
@@ -56,45 +57,82 @@ def report_to_slack(webhook_url, message_json):
     if response.status_code == 200:
         return jsonify({"status": "success"}), 200
     else:
+        logger.error(f"Failed to send to Slack: {response.status_code} - {response.text}")
         return jsonify({"error": "Failed to send to Slack"}), 500
 
-def generate_report(title, data):
-  message = f"Checking {title}"
+def generate_report_block_json(title, metric, data):
+    blocks = []
 
-  if len(data) == 0:
-    message = message + """
-      No data available
-    """
-    
-  elif len(data) == 1:
-    entry = data[0]
-    message = message + f"""
-      version {entry['app_display_version']} ({entry['app_build_version']}) time = {entry['duration_ms']:.2f} msec
-    """
+    blocks.append({
+        'type': 'section',
+        'text': {
+            'type': 'mrkdwn',
+            'text': f"Checking *{title}*, (`{metric}`)"
+        }
+    })
 
-  else:
+    if len(data) == 0:
+        blocks.append({
+            'type': 'section',
+            'text': {
+                'type': 'plain_text',
+                'text': "No data available"
+            }
+        })
+    elif len(data) == 1:
+        current_entry = data[0]
+        current_time = int(current_entry['duration_ms'])
+        formatted_current_time = format_milliseconds(current_time)
+        blocks.append({
+            'type': 'section',
+            'text': {
+                'type': 'plain_text',
+                'text': f"version {current_entry['app_display_version']} ({current_entry['app_build_version']}) time = {formatted_current_time}"
+            }
+        })
+    else:
+        blocks.append({
+            'type': 'section',
+            'text': {
+                'type': 'mrkdwn',
+                'text': "```\n" + format_result_in_table(data) + "\n```"
+            }
+        })
+    return {
+        "blocks": blocks
+    }
+
+def format_result_in_table(data):
+    col_widths = [12, 12, 25, 25, 10]  # version, build, duration, delta, change%
+
+    def row(cells):
+        return "  ".join(str(c).ljust(w) for c, w in zip(cells, col_widths))
+
+    lines = [
+        row(["version", "build", "duration", "delta", "change %"]),
+        "-" * (sum(col_widths) + 2 * (len(col_widths) - 1)),
+    ]
+
     for i in range(len(data) - 1):
-      current_entry = data[i]
-      previous_entry = data[i + 1]
+        current = data[i]
+        previous = data[i + 1]
+        current_time = int(current['duration_ms'])
+        previous_time = int(previous['duration_ms'])
+        delta = current_time - previous_time
+        change = (delta / previous_time) * 100 if previous_time != 0 else float('inf')
+        lines.append(row([
+            current['app_display_version'],
+            current['app_build_version'],
+            format_milliseconds(current_time),
+            format_milliseconds(delta),
+            f"{change:.2f} %",
+        ]))
 
-      current_time = int(current_entry['duration_ms'])
-      previous_time = int(previous_entry['duration_ms'])
-
-      delta = current_time - previous_time
-
-      formatted_current_time = format_milliseconds(current_time)
-      formatted_delta = format_milliseconds(delta)
-
-      change_percentile = (delta / previous_time) * 100 if previous_time != 0 else float('inf')
-      message = message + f"""
-        version {current_entry['app_display_version']} ({current_entry['app_build_version']}) time = {formatted_current_time}, delta = {formatted_delta} ({change_percentile:.2f}%)
-      """
-
-  return message
+    return "\n".join(lines)
 
 def format_milliseconds(ms):
     if ms == 0:
-        return "0 msecs"
+        return "0 ms"
 
     # 1. Track the sign and convert ms to a positive number
     is_negative = ms < 0
@@ -122,15 +160,15 @@ def format_milliseconds(ms):
     # 3. Build the final string dynamically
     time_parts = []
     if days > 0:
-        time_parts.append(f"{days} days")
+        time_parts.append(f"{days} d")
     if hours > 0:
-        time_parts.append(f"{hours} hours")
+        time_parts.append(f"{hours} h")
     if minutes > 0:
-        time_parts.append(f"{minutes} mins")
+        time_parts.append(f"{minutes} m")
     if seconds > 0:
-        time_parts.append(f"{seconds} secs")
+        time_parts.append(f"{seconds} s")
     if msecs > 0:
-        time_parts.append(f"{msecs} msecs")
+        time_parts.append(f"{msecs} ms")
 
     formatted_time = " ".join(time_parts)
 
@@ -180,114 +218,6 @@ def read_query2():
     data = [dict(row) for row in rows]
     return jsonify(data)
 
-@flask_app.get("/dev/appstart")
-def read_appstart():
-    query = """
-        SELECT
-            event_timestamp,
-            app_build_version,
-            app_display_version,
-            event_name,
-            trace_info.duration_us,
-            -- Calculate the 90th percentile for a realistic user experience metric
-            PERCENTILE_CONT(trace_info.duration_us, 0.9) OVER(PARTITION BY app_build_version) / 1000 AS p90_duration_ms,
-            os_version
-        FROM `simpleplay-c585b.firebase_performance.com_nomad_simpleplay_ANDROID`
-        WHERE
-            event_type = 'DURATION_TRACE'
-            AND event_name ='_app_start'
-            AND event_timestamp > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 60 DAY)
-    """
-    rows = bq_client.query(query).result()
-    data = [dict(row) for row in rows]
-    return jsonify(data)
-
-@flask_app.get("/dev/appinit")
-def read_appinit():
-    query = """
-        SELECT
-            event_timestamp,
-            app_build_version,
-            app_display_version,
-            event_name,
-            trace_info.duration_us,
-            -- Calculate the 90th percentile for a realistic user experience metric
-            PERCENTILE_CONT(trace_info.duration_us, 0.9) OVER(PARTITION BY app_build_version) / 1000 AS p90_duration_ms,
-            os_version
-        FROM `simpleplay-c585b.firebase_performance.com_nomad_simpleplay_ANDROID`
-        WHERE
-            event_type = 'DURATION_TRACE'
-            AND event_name ='app_initial_display'
-            AND event_timestamp > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 60 DAY)
-    """
-    rows = bq_client.query(query).result()
-    data = [dict(row) for row in rows]
-    return jsonify(data)
-
-# _app_start, but p90 only
-@flask_app.get("/dev/appstart_p90")
-def read_appstart_p90():
-    query = """
-        WITH VersionStats AS (
-            SELECT
-                app_build_version,
-                app_display_version,
-                event_timestamp,
-                -- Calculate the 90th percentile for a realistic user experience metric
-                PERCENTILE_CONT(trace_info.duration_us, 0.9) OVER(PARTITION BY app_build_version) / 1000 AS p90_duration_ms,
-                os_version
-            FROM `simpleplay-c585b.firebase_performance.com_nomad_simpleplay_ANDROID`
-            WHERE
-                event_type = 'DURATION_TRACE'
-                AND event_name ='_app_start'
-                AND event_timestamp > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 60 DAY)
-        )
-        SELECT
-        app_build_version,
-        app_display_version,
-        MAX(p90_duration_ms) as duration_ms
-        FROM VersionStats
-        GROUP BY app_build_version, app_display_version
-        ORDER BY
-            app_build_version DESC,
-            app_display_version DESC
-    """
-    rows = bq_client.query(query).result()
-    data = [dict(row) for row in rows]
-    return jsonify(data)
-
-@flask_app.get("/dev/appinit_p90")
-def read_appinit_p90():
-    query = """
-        WITH VersionStats AS (
-            SELECT
-                app_build_version,
-                app_display_version,
-                event_timestamp,
-                -- Calculate the 90th percentile for a realistic user experience metric
-                PERCENTILE_CONT(trace_info.duration_us, 0.9) OVER(PARTITION BY app_build_version) / 1000 AS p90_duration_ms,
-                os_version
-            FROM `simpleplay-c585b.firebase_performance.com_nomad_simpleplay_ANDROID`
-            WHERE
-                event_type = 'DURATION_TRACE'
-                AND event_name ='app_initial_display'
-                AND event_timestamp > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 60 DAY)
-        )
-        SELECT
-        app_build_version,
-        app_display_version,
-        MAX(p90_duration_ms) as duration_ms
-        FROM VersionStats
-        GROUP BY app_build_version, app_display_version
-        ORDER BY
-            app_build_version DESC,
-            app_display_version DESC
-    """
-    rows = bq_client.query(query).result()
-    data = [dict(row) for row in rows]
-    return jsonify(data)
-
-
 # _app_start, report to slack
 @flask_app.get("/dev/appstart_report")
 def read_appstart_report():
@@ -302,8 +232,8 @@ def report_appstart(webhook_url):
     rows = bq_client.query(query).result()
     data = [dict(row) for row in rows]
 
-    report_message = generate_report("App Start Time (_app_start)", data)
-    return report_to_slack(webhook_url, {"text": report_message})
+    report_message_json = generate_report_block_json("App Start Time", "_app_start", data)
+    return report_to_slack(webhook_url, report_message_json)
 
 @flask_app.get("/dev/appinit_report")
 def read_appinit_report():
@@ -318,8 +248,9 @@ def report_appinit(webhook_url):
     rows = bq_client.query(query).result()
     data = [dict(row) for row in rows]
 
-    report_message = generate_report("App Initial Display Time (app_initial_display)", data)
-    return report_to_slack(webhook_url, {"text": report_message})
+    report_message_json = generate_report_block_json("App Initial Display Time", "app_initial_display", data)
+    return report_to_slack(webhook_url, report_message_json)
+
 
 def build_query_for(event_name, interval_in_days = 60):
     query = f"""
