@@ -269,7 +269,7 @@ def report_appinit(webhook_url):
     report_message = generate_report("App Initial Display Time (app_initial_display)", data)
     return report_to_slack(webhook_url, {"text": report_message})
 
-def build_query_for(event_name):
+def build_query_for(event_name, interval_in_days = 60):
     query = f"""
         WITH VersionStats AS (
             SELECT
@@ -283,7 +283,7 @@ def build_query_for(event_name):
             WHERE
                 event_type = 'DURATION_TRACE'
                 AND event_name ='{event_name}'
-                AND event_timestamp > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 60 DAY)
+                AND event_timestamp > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {interval_in_days} DAY)
                 AND app_build_version != '99000'
         )
         SELECT
