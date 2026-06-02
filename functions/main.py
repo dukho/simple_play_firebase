@@ -77,16 +77,68 @@ def generate_report(title, data):
       current_entry = data[i]
       previous_entry = data[i + 1]
 
-      current_time = current_entry['duration_ms']
-      previous_time = previous_entry['duration_ms']
+      current_time = int(current_entry['duration_ms'])
+      previous_time = int(previous_entry['duration_ms'])
 
       delta = current_time - previous_time
+
+      formatted_current_time = format_milliseconds(current_time)
+      formatted_delta = format_milliseconds(delta)
+
       change_percentile = (delta / previous_time) * 100 if previous_time != 0 else float('inf')
       message = message + f"""
-        version {current_entry['app_display_version']} ({current_entry['app_build_version']}) time = {current_entry['duration_ms']:.2f} msec, delta = {delta:.2f} msec ({change_percentile:.2f}%)
+        version {current_entry['app_display_version']} ({current_entry['app_build_version']}) time = {formatted_current_time}, delta = {formatted_delta} ({change_percentile:.2f}%)
       """
 
   return message
+
+def format_milliseconds(ms):
+    if ms == 0:
+        return "0 msecs"
+
+    # 1. Track the sign and convert ms to a positive number
+    is_negative = ms < 0
+    ms = abs(ms)
+
+    # Define time constants in milliseconds
+    ms_in_sec = 1000
+    ms_in_min = ms_in_sec * 60
+    ms_in_hr = ms_in_min * 60
+    ms_in_day = ms_in_hr * 24
+
+    # 2. Extract each time unit
+    days = ms // ms_in_day
+    ms %= ms_in_day
+
+    hours = ms // ms_in_hr
+    ms %= ms_in_hr
+
+    minutes = ms // ms_in_min
+    ms %= ms_in_min
+
+    seconds = ms // ms_in_sec
+    msecs = ms % ms_in_sec
+
+    # 3. Build the final string dynamically
+    time_parts = []
+    if days > 0:
+        time_parts.append(f"{days} days")
+    if hours > 0:
+        time_parts.append(f"{hours} hours")
+    if minutes > 0:
+        time_parts.append(f"{minutes} mins")
+    if seconds > 0:
+        time_parts.append(f"{seconds} secs")
+    if msecs > 0:
+        time_parts.append(f"{msecs} msecs")
+
+    formatted_time = " ".join(time_parts)
+
+    # 4. Add the negative sign if the initial input was negative
+    if is_negative:
+        formatted_time = f"- {formatted_time}"
+
+    return formatted_time
 
 @flask_app.get("/dev/query")
 def read_query():
