@@ -16,9 +16,12 @@ bq_client = bigquery.Client()  # reuse across requests (module-level)
 
 @flask_app.get("/dev/test")
 def dev_test():
+    # @#sym:dev_test
+    test_key = os.environ.get("TEST_KEY", "")
+    logger.info(f"TEST_KEY from runtime env: {test_key}")
     logger.error("This is test ERROR")
     logger.info("This is test INFO")
-    return jsonify({"message": "Hello from Flask!"})
+    return jsonify({"message": "Hello from Flask!", "test_key": test_key})
 
 @flask_app.get("/dev/url")
 def dev_secret_url():

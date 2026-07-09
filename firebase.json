@@ -2,7 +2,7 @@
   "functions": {
     "source": "functions",
     "codebase": "default",
-    "ignore": ["venv", ".git"],
+    "ignore": ["venv", "envs", ".git"],
     "main": "main.py" 
   }
 }
