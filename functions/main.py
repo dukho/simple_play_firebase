@@ -12,7 +12,14 @@ set_global_options(max_instances=10)
 
 flask_app = Flask(__name__)
 
-bq_client = bigquery.Client()  # reuse across requests (module-level)
+bq_client = None
+
+
+def get_bq_client():
+    global bq_client
+    if bq_client is None:
+        bq_client = bigquery.Client()
+    return bq_client
 
 @flask_app.get("/dev/test")
 def dev_test():
@@ -197,7 +204,7 @@ def read_query():
         AND event_name IN ('_app_start', 'app_initial_display')
         LIMIT 50
     """
-    rows = bq_client.query(query).result()
+    rows = get_bq_client().query(query).result()
     data = [dict(row) for row in rows]
     return jsonify(data)
 
@@ -217,7 +224,7 @@ def read_query2():
             AND event_name IN ('_app_start', 'app_initial_display')
             AND event_timestamp > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 60 DAY)
     """
-    rows = bq_client.query(appstart_query).result()
+    rows = get_bq_client().query(appstart_query).result()
     data = [dict(row) for row in rows]
     return jsonify(data)
 
@@ -232,7 +239,7 @@ def read_appstart_report():
 
 def report_appstart(webhook_url):
     query = build_query_for("_app_start")
-    rows = bq_client.query(query).result()
+    rows = get_bq_client().query(query).result()
     data = [dict(row) for row in rows]
 
     report_message_json = generate_report_block_json("App Start Time", "_app_start", data)
@@ -248,7 +255,7 @@ def read_appinit_report():
 
 def report_appinit(webhook_url):
     query = build_query_for("app_initial_display")
-    rows = bq_client.query(query).result()
+    rows = get_bq_client().query(query).result()
     data = [dict(row) for row in rows]
 
     report_message_json = generate_report_block_json("App Initial Display Time", "app_initial_display", data)
